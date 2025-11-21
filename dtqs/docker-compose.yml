@@ -1,0 +1,49 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MAX_RETRIES=3
+      - HB_TTL_S=10
+      - WATCHDOG_PERIOD_S=5
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - HB_TTL_S=10
+      - HB_PERIOD_S=3
+    depends_on:
+      - redis
+    deploy:
+      replicas: 1  # scale via: docker compose up -d --scale worker=3
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
