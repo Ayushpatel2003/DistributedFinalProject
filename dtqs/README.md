@@ -1,84 +1,66 @@
 # DTQS – Distributed Task Queue & Scheduler
 
-Stack: FastAPI, Redis, Docker Compose, Prometheus (+ optional Grafana)
+A minimal distributed task queue built with FastAPI (API + scheduler), Redis (broker/state), and worker containers. Includes Prometheus metrics and optional Grafana.
 
-## Run
+## Stack
+- FastAPI / uvicorn
+- Redis
+- Worker process (Python)
+- Prometheus (scrapes `/metrics`)
+- Grafana (optional)
+- Docker Compose orchestration
+
+## Quick start
 ```bash
+cd /Users/ayush/Desktop/DistributedFinalProject/dtqs
 docker compose up --build
-# scale workers
-docker compose up -d --scale worker=3
+# or run detached
+# docker compose up -d --build
 ```
 
-Submit Tasks
+Check status:
+```bash
+docker compose ps
+```
+
+## Submit and check a task
+```bash
+# submit
 curl -X POST http://localhost:8000/tasks \
   -H 'Content-Type: application/json' \
   -d '{"payload": 12}'
-# => {"task_id":"<ID>","status":"queued"}
+# => {"task_id":"<ID>","status":"queued",...}
 
+# poll status
 curl http://localhost:8000/tasks/<ID>
-# queued -> in_progress -> done
+# queued → in_progress → done (result is payload squared if numeric)
+```
 
-Simulate Failure
-# task that raises an error
-curl -X POST http://localhost:8000/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{"payload": "crash"}'
+## Failures and retries
+- Submit a failing task: payload `"crash"` will raise an error.
+- If a worker dies (stop it with `docker compose stop worker`), watchdog requeues in-progress tasks after the heartbeat TTL until `MAX_RETRIES` is reached.
 
-# or kill workers:
-docker compose stop worker
-# after ~HB_TTL_S, watchdog requeues; then:
+## Metrics
+- API metrics endpoint: `http://localhost:8000/metrics`
+- Prometheus UI: `http://localhost:9090`
+- Useful queries:
+  - `dtqs_queue_depth`
+  - `dtqs_tasks_submitted_total`
+  - `dtqs_tasks_retried_total`
+  - `rate(dtqs_tasks_completed_total[1m])` (if wired)
+  - `rate(dtqs_tasks_retried_total[1m])`
+
+## Scaling workers
+```bash
 docker compose up -d --scale worker=3
+```
 
-Monitoring
+## Stop the stack
+```bash
+docker compose down -v
+```
 
-
-Prometheus: http://localhost:9090
-
-
-Grafana: http://localhost:3000 (add Prometheus datasource http://prometheus:9090)
-
-
-Metrics:
-
-
-rate(dtqs_tasks_submitted_total[1m])
-
-
-rate(dtqs_tasks_completed_total[1m])
-
-
-rate(dtqs_tasks_retried_total[1m])
-
-
-dtqs_queue_depth
-
-
-
-
-Notes
-
-
-Worker heartbeats stored at worker:hb:{worker_id} with TTL.
-
-
-Watchdog requeues in_progress tasks whose worker heartbeat expired, up to MAX_RETRIES.
-
-
-Results and status are authoritative in task:{id}.
-
-
-Extend with Redis Streams + consumer groups for at-least-once delivery.
-
-
-
----
-
-### How to respond
-1. Create all files exactly as above.
-2. Do not paraphrase or shorten file contents.
-3. After creating, run `docker compose up --build` locally.
-4. Provide me with a summary of successful build output and how to submit a sample task.
-5. If any step fails, fix and retry automatically until the stack starts cleanly.
-6. Confirm that Prometheus scrapes `/metrics` and that `dtqs_queue_depth` updates when tasks are added.
-
-**End of prompt.**
+## Notes
+- Task status and results live in Redis keys `task:{id}`.
+- Heartbeats: `worker:hb:{worker_id}` with TTL controls watchdog requeues.
+- Queue key: `queue:tasks`; inflight set: `inflight`.

@@ -30,7 +30,7 @@ def submit_task(ts: TaskSubmit):
         "updated_at": now,
         "payload": json.dumps(ts.payload),
     })
-    pipe.lpush(QUEUE_KEY, json.dumps({"task_id": task_id, "payload": ts.payload}))
+    pipe.lpush(QUEUE_KEY, json.dumps({"task_id": task_id, "payload": ts.payload, "enqueued_at": now}))
     pipe.execute()
     TASKS_SUBMITTED.inc()
     try:
@@ -95,7 +95,11 @@ def watchdog_loop():
                                 "updated_at": time.time(),
                                 "retries": retries + 1,
                             })
-                            r.lpush(QUEUE_KEY, json.dumps({"task_id": task_id, "payload": payload}))
+                            r.lpush(QUEUE_KEY, json.dumps({
+                                "task_id": task_id,
+                                "payload": payload,
+                                "enqueued_at": time.time(),
+                            }))
                             r.srem(INFLIGHT, task_id)
                             TASKS_RETRIED.inc()
                         else:

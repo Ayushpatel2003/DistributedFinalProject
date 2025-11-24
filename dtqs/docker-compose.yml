@@ -4,6 +4,8 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
 
   api:
     build:
@@ -47,3 +49,6 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+
+volumes:
+  redis-data:
